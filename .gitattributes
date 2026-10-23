@@ -1,2 +1,2 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# LF in every checkout, so a tag builds the same EXE on any machine.
+* text=auto eol=lf
