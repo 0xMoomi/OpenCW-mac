@@ -81,8 +81,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // Model holds the latest daemon snapshot for the view.
 @MainActor
 final class Model: ObservableObject {
+    enum Link { case starting, reachable, unreachable }
+
     @Published private(set) var snap = Snapshot.initial
-    @Published private(set) var reachable = false
+    @Published private(set) var link = Link.starting
     private var client: DaemonClient?
 
     func start() {
@@ -100,17 +102,21 @@ final class Model: ObservableObject {
     private func apply(_ event: DaemonClient.Event) {
         switch event {
         case .snapshot(let s):
-            reachable = true
+            link = .reachable
             snap = s
         case .unreachable:
-            reachable = false
+            link = .unreachable
             snap = .unreachable
         }
     }
 
-    /// The switch is inert while the helper is missing or while upstream would
-    /// be restoring the network (busy and not heading on).
-    var toggleEnabled: Bool { reachable && !(snap.busy && snap.state == .off) }
+    /// The switch is inert until the helper answers and while the helper
+    /// restores the network, exactly when it would ignore a toggle.
+    var toggleEnabled: Bool { link == .reachable && snap.canToggle }
+
+    /// Upstream paints the subtitle red only for a failed verdict; here also
+    /// when the helper cannot be reached.
+    var failed: Bool { link == .unreachable || !snap.error.isEmpty }
 
     func toggle() {
         guard toggleEnabled else { return }
@@ -118,7 +124,7 @@ final class Model: ObservableObject {
     }
 
     func switchServer() {
-        guard reachable, snap.canSwitch else { return }
+        guard link == .reachable, snap.canSwitch else { return }
         client?.send(cmd: "switch")
     }
 }

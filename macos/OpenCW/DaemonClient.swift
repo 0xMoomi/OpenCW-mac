@@ -12,7 +12,10 @@ struct Snapshot: Decodable, Equatable, Sendable {
     var subtitle: String
     var progress: Double?
     var pingMS: Int?
+    /// Lit bars out of 4, as upstream draws them: 0 none, 1 bad, 2 fair, 3–4 good.
     var signal: Int
+    /// False while the daemon restores the network and ignores toggle.
+    var canToggle: Bool
     var canSwitch: Bool
     var busy: Bool
     var error: String
@@ -20,17 +23,20 @@ struct Snapshot: Decodable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case state, title, subtitle, progress, signal, busy, error
         case pingMS = "ping_ms"
+        case canToggle = "can_toggle"
         case canSwitch = "can_switch"
     }
 
     init(state: State, title: String, subtitle: String, progress: Double? = nil, pingMS: Int? = nil,
-         signal: Int = 0, canSwitch: Bool = false, busy: Bool = false, error: String = "") {
+         signal: Int = 0, canToggle: Bool = false, canSwitch: Bool = false, busy: Bool = false,
+         error: String = "") {
         self.state = state
         self.title = title
         self.subtitle = subtitle
         self.progress = progress
         self.pingMS = pingMS
         self.signal = signal
+        self.canToggle = canToggle
         self.canSwitch = canSwitch
         self.busy = busy
         self.error = error
@@ -44,12 +50,13 @@ struct Snapshot: Decodable, Equatable, Sendable {
         progress = try c.decodeIfPresent(Double.self, forKey: .progress)
         pingMS = try c.decodeIfPresent(Int.self, forKey: .pingMS)
         signal = try c.decodeIfPresent(Int.self, forKey: .signal) ?? 0
+        canToggle = try c.decodeIfPresent(Bool.self, forKey: .canToggle) ?? false
         canSwitch = try c.decodeIfPresent(Bool.self, forKey: .canSwitch) ?? false
         busy = try c.decodeIfPresent(Bool.self, forKey: .busy) ?? false
         error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
     }
 
-    /// Shown until the daemon's first snapshot arrives.
+    /// Shown, muted and inert, until the first connect attempt settles.
     static let initial = Snapshot(state: .off, title: "연결 안 됨", subtitle: "게임을 실행하기 전에 연결해주세요")
 
     static let unreachable = Snapshot(

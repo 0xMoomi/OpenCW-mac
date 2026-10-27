@@ -27,8 +27,12 @@ type ViewState struct {
 	Progress *float64 `json:"progress"`
 	// PingMS is the connected exit's latency, when measured.
 	PingMS *int `json:"ping_ms"`
-	// Signal is the ping verdict in bars, 0 (bad or unknown) to 3 (good).
-	Signal    int    `json:"signal"`
+	// Signal is the Windows app's lit bar count out of 4: 0 (no reading) or
+	// 1 (bad), 2 (fair), 3–4 (good).
+	Signal int `json:"signal"`
+	// CanToggle is false while the network is being restored, when the
+	// switch is disabled and toggle is ignored.
+	CanToggle bool   `json:"can_toggle"`
 	CanSwitch bool   `json:"can_switch"`
 	Busy      bool   `json:"busy"`
 	Error     string `json:"error"` // raw failure text, set only after a failure
@@ -112,7 +116,7 @@ func (v *View) phase() viewPhase {
 // State returns what to show now.
 func (v *View) State() ViewState {
 	ph := v.phase()
-	out := ViewState{State: ViewOff, Busy: v.snap.Busy}
+	out := ViewState{State: ViewOff, Busy: v.snap.Busy, CanToggle: ph != phaseStopping}
 	out.Title, out.Subtitle = v.texts(ph)
 	switch ph {
 	case phaseConnecting, phaseRecovering:
@@ -127,7 +131,7 @@ func (v *View) State() ViewState {
 				ms := int(math.Round(*l))
 				out.PingMS = &ms
 			}
-			out.Signal = max(0, signalBars(m)-1)
+			out.Signal = signalBars(m)
 		}
 	case phaseFailed:
 		out.Error = v.snap.Error
@@ -188,14 +192,17 @@ func (v *View) progressStage() (string, float64) {
 
 func (v *View) failure() (string, string) {
 	err := v.snap.Err
-	denied := errors.Is(err, fs.ErrPermission) || strings.Contains(strings.ToLower(v.snap.Error), "access is denied")
+	lower := strings.ToLower(v.snap.Error)
+	denied := errors.Is(err, fs.ErrPermission) ||
+		strings.Contains(lower, "operation not permitted") || strings.Contains(lower, "permission denied")
 	switch {
 	case errors.Is(err, ErrInterface) && denied:
-		return "권한 부족", "관리자 권한으로 실행해주세요"
+		// The helper runs as root, so a denial means a broken install.
+		return "권한 부족", "OpenCW를 다시 설치해주세요"
 	case errors.Is(err, ErrInterface):
-		return "연결 실패", "PC를 재시작한 후 다시 연결해주세요"
+		return "연결 실패", "Mac을 재시작한 후 다시 연결해주세요"
 	case errors.Is(err, ErrCleanup):
-		return "연결 해제 실패", "PC를 재시작하면 네트워크 설정이 복원됩니다"
+		return "연결 해제 실패", "Mac을 재시작하면 네트워크 설정이 복원됩니다"
 	case errors.Is(err, ErrCatalog):
 		return "서버 목록 불러오기 실패", "인터넷 연결을 확인해주세요"
 	}

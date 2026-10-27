@@ -59,8 +59,9 @@ struct HomeView: View {
     var body: some View {
         let s = model.snap
         let on = s.state != .off
-        let spinning = s.state == .connecting || s.busy
-        let failed = !model.reachable || !s.error.isEmpty
+        // Upstream spins the knob while connecting and while restoring the
+        // network, not while loading the list.
+        let spinning = s.state == .connecting || (s.busy && !s.canToggle)
 
         VStack(spacing: 0) {
             MapleToggle(on: on, busy: spinning, enabled: model.toggleEnabled) { model.toggle() }
@@ -74,13 +75,14 @@ struct HomeView: View {
                 .padding(.bottom, 4)
             Text(s.subtitle)
                 .font(Fonts.body)
-                .foregroundColor(failed ? Palette.bad : Palette.muted)
+                .foregroundColor(model.failed ? Palette.bad : Palette.muted)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: 26)
             if !s.error.isEmpty {
-                // Upstream keeps the raw cause small and quiet under the red verdict.
+                // Upstream lists the raw cause on its details page; this port has
+                // none, so it sits small and quiet under the red verdict.
                 Text(s.error)
                     .font(Fonts.small)
                     .foregroundColor(Palette.muted)
@@ -90,19 +92,22 @@ struct HomeView: View {
                     .padding(.top, 6)
                     .textSelection(.enabled)
             }
+            // Determinate while connecting; a sweep while loading the list or
+            // restoring the network (busy without a fraction), as upstream.
             if let progress = s.progress {
                 ProgressBar(value: progress)
                     .padding(.top, 28)
+            } else if s.busy {
+                ProgressBar(value: -1)
+                    .padding(.top, 28)
             }
             if s.state == .connected {
-                if let ping = s.pingMS {
-                    PingRow(ms: ping, signal: s.signal)
-                        .padding(.top, 26)
-                }
+                PingRow(ms: s.pingMS, signal: s.signal)
+                    .padding(.top, 26)
                 Button("서버 변경") { model.switchServer() }
                     .buttonStyle(QuietButtonStyle(width: 120, height: 40))
                     .disabled(!s.canSwitch)
-                    .padding(.top, s.pingMS == nil ? 26 : 22)
+                    .padding(.top, 22)
             }
         }
         .padding(.horizontal, 20)
@@ -113,16 +118,16 @@ struct HomeView: View {
 
 /// Signal bars for the verdict and the latency beside them, centred as one unit.
 private struct PingRow: View {
-    var ms: Int
+    var ms: Int?
     var signal: Int
 
     var body: some View {
-        // The daemon grades 0–3; upstream lights 3 of 4 green for this tier.
-        let color = signal >= 3 ? Palette.good : signal == 2 ? Palette.fair : Palette.bad
+        // Upstream's qualityOf colours by bar count: 3–4 good, 2 fair, 1 bad.
+        let color = signal >= 3 ? Palette.good : signal == 2 ? Palette.fair : signal == 1 ? Palette.bad : Palette.muted
         HStack(spacing: 0) {
             SignalBars(lit: max(0, min(4, signal)), color: color)
                 .padding(.trailing, 14)
-            Text("\(ms)")
+            Text(ms.map { "\($0)" } ?? "—")
                 .font(Fonts.ping)
                 .foregroundColor(Palette.ink)
                 .monospacedDigit()
@@ -134,6 +139,6 @@ private struct PingRow: View {
         }
         .frame(height: 44)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("핑 \(ms)ms")
+        .accessibilityLabel(ms.map { "핑 \($0)ms" } ?? "핑 측정 전")
     }
 }
