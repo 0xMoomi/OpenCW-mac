@@ -15,9 +15,11 @@ const tunInterfaceName = ""
 // temp folder, e.g. ".../T/winetemp-<id>/Nexon Launcher" for nexon_runtime.exe
 // and nexon_client.exe, so those names are matched too. The bundle's own
 // Contents/MacOS binary also acts as a Wine loader for the Nexon client and
-// talks to Nexon directly, so the whole bundle is matched.
+// talks to Nexon directly, so the whole bundle is matched. Both are anchored to
+// the installed app in /Applications and the per-user temp folder, so a copy
+// elsewhere (e.g. ~/Downloads) is not relayed.
 var mapleProcesses = []string{
-	`(?i)(/MapleStory Launcher\.app/Contents/|/winetemp-[^/]+/(Nexon Launcher|MapleStory[^/]*)$)`,
+	`(?i)(^/Applications/MapleStory Launcher\.app/Contents/|^/private/var/folders/[^/]+/[^/]+/T/winetemp-[^/]+/(Nexon Launcher|MapleStory[^/]*)$)`,
 }
 
 // Rules returns the engine's process routing rules, evaluated in order.

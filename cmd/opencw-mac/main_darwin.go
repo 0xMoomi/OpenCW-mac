@@ -13,11 +13,37 @@ import (
 	"opencw/internal/client"
 )
 
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
+// lockPath is a root-only file whose exclusive lock marks a running instance.
+const lockPath = "/var/run/opencw.lock"
+
+// lock holds lockPath's descriptor; the kernel releases the lock on exit.
+var lock *os.File
+
 func main() {
+	// Running as root, so never resolve helper commands (sing-tun runs
+	// dscacheutil by name) from a user-writable PATH directory.
+	os.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
 	// The TUN interface and its routes need root.
 	if os.Geteuid() != 0 {
 		fmt.Fprintf(os.Stderr, "OpenCW는 네트워크 경로를 바꾸기 때문에 관리자 권한이 필요합니다.\n"+
 			"아래처럼 앞에 sudo를 붙여 다시 실행해주세요 (Mac 로그인 암호를 물어봅니다).\n\n  sudo %s\n", os.Args[0])
+		os.Exit(1)
+	}
+	// Two instances would create two utuns with the same address.
+	var err error
+	lock, err = os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
+	if err == nil {
+		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	}
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		fmt.Fprintln(os.Stderr, "OpenCW가 이미 실행 중입니다. 다른 터미널 창에서 실행 중인 OpenCW를 그대로 쓰거나, 그 창에서 Ctrl+C로 끈 뒤 다시 실행해주세요.")
+		os.Exit(1)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "실행 잠금 파일을 만들지 못했습니다:", err)
 		os.Exit(1)
 	}
 	os.Exit(run())
@@ -25,7 +51,8 @@ func main() {
 
 func run() int {
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	// SIGHUP arrives when the Terminal window is closed.
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 	changed := make(chan struct{}, 1)
 	c := client.New(client.DefaultDependencies(), func() {
 		select {
@@ -33,7 +60,7 @@ func run() int {
 		default:
 		}
 	})
-	fmt.Println("OpenCW 시작 (끝내려면 Ctrl+C)")
+	fmt.Println("OpenCW " + version + " 시작 (끝내려면 Ctrl+C 또는 이 창 닫기)")
 	c.Toggle()
 	code := 0
 	last := ""

@@ -42,6 +42,7 @@ func TestDarwinConfig(t *testing.T) {
 		// Observed proc_pidpath of nexon_runtime.exe and nexon_client.exe.
 		"/private/var/folders/4p/kxy7qw3x06qf42f7mhzshtkm0000gn/T/winetemp-250103304-33792-1792601031-0/Nexon Launcher",
 		"/private/var/folders/4p/x/T/winetemp-1-2-3-0/MapleStory Classic World",
+		"/Applications/MapleStory Launcher.app/Contents/SharedSupport/maplestoryna/MapleStory Launcher/wineserver",
 		// The bundle's own binary also runs the Nexon client under Wine.
 		"/Applications/MapleStory Launcher.app/Contents/MacOS/MapleStory Launcher",
 	}
@@ -49,6 +50,11 @@ func TestDarwinConfig(t *testing.T) {
 		"/private/var/folders/4p/x/T/winetemp-1-2-3-0/Steam",
 		"/Applications/Safari.app/Contents/MacOS/Safari",
 		"/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wineloader",
+		// Copies outside /Applications and the per-user temp folder.
+		"/Users/x/Downloads/MapleStory Launcher.app/Contents/MacOS/MapleStory Launcher",
+		"/tmp/winetemp-1/MapleStory",
+		"/private/tmp/winetemp-1/Nexon Launcher",
+		"/Users/x/private/var/folders/4p/x/T/winetemp-1/Nexon Launcher",
 	}
 	// sing-box matches process_path_regex with regexp.Compile and MatchString.
 	for i, rule := range config.Route.Rules {
