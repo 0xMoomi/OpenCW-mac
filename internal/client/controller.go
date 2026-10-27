@@ -817,7 +817,7 @@ func (s *search) keepFallback(r attemptResult) {
 }
 
 func (s *search) accept() error {
-	// Finish all speculative sessions before changing Windows interfaces.
+	// Finish all speculative sessions before changing the OS network interfaces.
 	// Their network monitors must not observe the winner's route transition.
 	s.cancel()
 	for s.active > 0 {

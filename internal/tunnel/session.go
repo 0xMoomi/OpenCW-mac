@@ -45,7 +45,7 @@ type Session struct {
 	closeErr error
 }
 
-// The engine constructs the inbound once, but no Windows interface or route is
+// The engine constructs the inbound once, but no TUN interface or route is
 // created until a real TCP/UDP exit check succeeds. Activation keeps the same
 // outbound and authenticated tunnel, avoiding a second relay handshake.
 type deferredTun struct {
@@ -168,7 +168,7 @@ func Start(ctx context.Context, server core.Server, enableTun bool) (*Session, e
 	return s, nil
 }
 
-// EnableTun creates the Windows interface and routes on the running engine.
+// EnableTun creates the TUN interface and routes on the running engine.
 func (s *Session) EnableTun() error {
 	in, ok := s.box.Inbound().Get(tunTag)
 	if !ok {
@@ -179,7 +179,7 @@ func (s *Session) EnableTun() error {
 	}
 	// The router was started before the interface existed. Process lookup only
 	// accepts sources found in this cache; publish the new address before apps
-	// can send their first packet, without waiting for a Windows notification.
+	// can send their first packet, without waiting for the OS change notification.
 	return s.box.Network().UpdateInterfaces()
 }
 
