@@ -39,8 +39,12 @@ func TestDarwinConfig(t *testing.T) {
 	game := []string{
 		"/Applications/MapleStory Launcher.app/Contents/SharedSupport/maplestoryna/MapleStory Launcher/wineloader",
 		"/Applications/MapleStory Launcher.app/Contents/SharedSupport/maplestoryna/MapleStory Classic World.app/Contents/MacOS/MapleStory Classic World",
+		// Observed proc_pidpath of nexon_runtime.exe and nexon_client.exe.
+		"/private/var/folders/4p/kxy7qw3x06qf42f7mhzshtkm0000gn/T/winetemp-250103304-33792-1792601031-0/Nexon Launcher",
+		"/private/var/folders/4p/x/T/winetemp-1-2-3-0/MapleStory Classic World",
 	}
 	other := []string{
+		"/private/var/folders/4p/x/T/winetemp-1-2-3-0/Steam",
 		"/Applications/Safari.app/Contents/MacOS/Safari",
 		"/Applications/MapleStory Launcher.app/Contents/MacOS/MapleStory Launcher",
 		"/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wineloader",

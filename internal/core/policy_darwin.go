@@ -10,7 +10,13 @@ const tunInterfaceName = ""
 // per-app stub such as "MapleStory Classic World.app/Contents/MacOS/...") lies
 // in the bundle's SharedSupport folder, so macOS cannot tell them apart. That
 // Wine copy runs only Nexon software, so other apps are unaffected.
-var mapleProcesses = []string{`(?i)/MapleStory Launcher\.app/Contents/SharedSupport/`}
+//
+// CrossOver also runs Windows processes from a hard link of the loader in a
+// temp folder, e.g. ".../T/winetemp-<id>/Nexon Launcher" for nexon_runtime.exe
+// and nexon_client.exe, so those names are matched too.
+var mapleProcesses = []string{
+	`(?i)(/MapleStory Launcher\.app/Contents/SharedSupport/|/winetemp-[^/]+/(Nexon Launcher|MapleStory[^/]*)$)`,
+}
 
 // Rules returns the engine's process routing rules, evaluated in order.
 // Anything unmatched goes direct.
