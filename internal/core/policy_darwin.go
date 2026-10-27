@@ -13,9 +13,11 @@ const tunInterfaceName = ""
 //
 // CrossOver also runs Windows processes from a hard link of the loader in a
 // temp folder, e.g. ".../T/winetemp-<id>/Nexon Launcher" for nexon_runtime.exe
-// and nexon_client.exe, so those names are matched too.
+// and nexon_client.exe, so those names are matched too. The bundle's own
+// Contents/MacOS binary also acts as a Wine loader for the Nexon client and
+// talks to Nexon directly, so the whole bundle is matched.
 var mapleProcesses = []string{
-	`(?i)(/MapleStory Launcher\.app/Contents/SharedSupport/|/winetemp-[^/]+/(Nexon Launcher|MapleStory[^/]*)$)`,
+	`(?i)(/MapleStory Launcher\.app/Contents/|/winetemp-[^/]+/(Nexon Launcher|MapleStory[^/]*)$)`,
 }
 
 // Rules returns the engine's process routing rules, evaluated in order.
