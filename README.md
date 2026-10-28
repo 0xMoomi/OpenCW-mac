@@ -1,8 +1,10 @@
 # OpenCW Mac 버전
 
-> 이 프로젝트는 kimd0님의 [OpenCW](https://github.com/kimd0/OpenCW)를 macOS에서 쓸 수 있게 옮긴 **비공식 Mac 포트**입니다.
-> 원작과 마찬가지로 [GPL-3.0-or-later](LICENSE) 라이선스를 따릅니다.
-> Windows를 쓰신다면 원본 [OpenCW (Windows 버전)](https://github.com/kimd0/OpenCW)을 사용하세요.
+> **원작자: kimd0** · 원본 저장소: [github.com/kimd0/OpenCW](https://github.com/kimd0/OpenCW) · 원 게시글: [메이플스토리 클래식 마이너 갤러리](https://gall.dcinside.com/mgallery/board/view/?id=mapleclassic&no=40380)
+>
+> OpenCW는 kimd0님이 만든 Windows용 프로그램입니다. 이 저장소는 제가 Mac에서 직접 쓰려고 **Mac 버전만 옮겨 만든 비공식 포트**이며, 원작자와는 관계가 없습니다.
+> 프로그램의 핵심 아이디어와 코드는 모두 원작에서 왔고, 원작과 같은 [GPL-3.0-or-later](LICENSE) 라이선스를 따릅니다.
+> Windows를 쓰신다면 원본 [OpenCW](https://github.com/kimd0/OpenCW)를 사용하세요.
 
 메이플스토리 클래식월드 Mac 버전(`MapleStory Launcher` 앱)의 게임 통신만 해외 공개 중계 서버로 우회하여 네트워크 지연을 줄여주는 프로그램입니다.
 브라우저 등 게임 외 다른 프로그램의 통신에는 영향을 주지 않습니다. 스위치 하나로 켜고 끄는 Mac 앱으로 동작합니다.
@@ -45,7 +47,7 @@
 ## 사용하기
 
 1. **응용 프로그램** 폴더나 **Launchpad**에서 **OpenCW**를 엽니다.
-2. 창 가운데의 **스위치**를 누릅니다. 스위치가 주황색으로 바뀌고 `연결 중`이 표시됩니다.
+2. OpenCW를 열면 **스위치가 자동으로 켜지고** `연결 중`이 표시됩니다. (직접 끈 뒤에는 스위치를 눌러 다시 켤 수 있습니다.)
 3. `연결됨`이 나올 때까지 기다립니다. 보통 몇 초 걸립니다.
 4. 그다음 **MapleStory Launcher**를 실행해 평소처럼 게임을 시작합니다.
 5. 게임하는 동안 OpenCW는 **종료하지 말고** 그대로 둡니다. 창은 닫아도 됩니다. 창을 닫으면 OpenCW는 화면 맨 위 메뉴 막대의 **단풍잎 아이콘**으로 들어가고(Dock 아이콘도 사라집니다) **연결은 그대로 유지**됩니다. 연결된 동안 아이콘 옆에 현재 핑(예: `145ms`)이 표시됩니다.

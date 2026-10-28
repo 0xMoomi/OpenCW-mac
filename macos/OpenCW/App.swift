@@ -142,6 +142,9 @@ final class Model: ObservableObject {
     private var server: Snapshot.Server?
     private var ping: Int?
     private var noticeTimer: Timer?
+    // Connect once per launch, on the helper's first answer; turning the
+    // switch off afterwards is respected.
+    private var autoConnected = false
 
     func start() {
         let path = ProcessInfo.processInfo.environment["OPENCW_SOCKET"] ?? "/var/run/opencw.sock"
@@ -161,6 +164,12 @@ final class Model: ObservableObject {
             link = .reachable
             track(s)
             snap = s
+            if !autoConnected {
+                autoConnected = true
+                // While the catalog loads the helper keeps this as the wanted
+                // end state and connects when it is ready.
+                if s.state == .off && s.canToggle { client?.send(cmd: "toggle") }
+            }
         case .unreachable:
             link = .unreachable
             snap = .unreachable
