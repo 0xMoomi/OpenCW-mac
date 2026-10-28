@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"opencw/internal/client"
+	"opencw/internal/core"
+	"opencw/internal/measure"
 )
 
 type fakeController struct {
@@ -243,5 +245,30 @@ func TestPeerAccepted(t *testing.T) {
 	p := h.dial()
 	if v := p.next(t); v.Title != "연결 안 됨" {
 		t.Fatalf("first state %+v", v)
+	}
+}
+
+// TestLivePing checks that a changed reading reaches the app as a new state
+// with the exit, and that an unchanged one sends nothing.
+func TestLivePing(t *testing.T) {
+	h := newHarness(t, allowAll)
+	p := h.dial()
+	p.next(t)
+	f := <-h.made
+	connected := func(ms float64) client.Snapshot {
+		return client.Snapshot{Connected: true, Status: client.StatusConnected, Server: "198.51.100.7", Protocol: "hysteria2",
+			Rows: []core.Probe{{Measurement: core.Measurement{ExitIP: "198.51.100.7", Country: "US", Colo: "DFW"}}},
+			Ping: &measure.Reading{OK: true, MS: ms}}
+	}
+	f.set(connected(152))
+	v := p.waitFor(t, "연결됨")
+	if v.PingMS == nil || *v.PingMS != 152 || v.PingSource != "game" || v.Signal != 3 ||
+		v.Server == nil || *v.Server != (client.ServerInfo{Label: "미국 댈러스", IP: "198.51.100.7", Protocol: "hysteria2"}) {
+		t.Fatalf("connected %+v server %+v", v, v.Server)
+	}
+	f.set(connected(152.2)) // rounds to the same state: not sent
+	f.set(connected(128))
+	if v := p.next(t); v.PingMS == nil || *v.PingMS != 128 {
+		t.Fatalf("live ping %+v", v)
 	}
 }

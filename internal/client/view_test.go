@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"opencw/internal/core"
+	"opencw/internal/measure"
 )
 
 func ms(v float64) *float64 { return &v }
@@ -100,6 +101,52 @@ func TestSignal(t *testing.T) {
 		v.Update(Snapshot{Connected: true, Server: "a", Rows: []core.Probe{{Measurement: func() core.Measurement { tc.m.ExitIP = "a"; return tc.m }()}}})
 		if got := v.State().Signal; got != tc.want {
 			t.Errorf("%+v: signal %d, want %d", tc.m, got, tc.want)
+		}
+	}
+}
+
+func TestViewPing(t *testing.T) {
+	relay := core.Measurement{ExitIP: "1.2.3.4", Country: "US", Colo: "LAX", IdleMS: ms(99.6), TCPMS: ms(140)}
+	base := Snapshot{Connected: true, Status: StatusConnected, Server: "1.2.3.4", Protocol: "vless",
+		Rows: []core.Probe{{Measurement: relay}}}
+	for _, tc := range []struct {
+		name   string
+		ping   *measure.Reading
+		ms     int
+		source string
+		signal int
+	}{
+		{"no probe", nil, 100, "relay", 4},
+		{"game", &measure.Reading{OK: true, MS: 151.4, SpreadMS: 6}, 151, "game", 3},
+		{"game jittery", &measure.Reading{OK: true, MS: 151.4, SpreadMS: 30, Failures: 1}, 151, "game", 2},
+		{"game unreachable", &measure.Reading{Failures: 3}, 100, "relay", 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := base
+			s.Ping = tc.ping
+			var v View
+			v.Update(s)
+			got := v.State()
+			if got.PingMS == nil || *got.PingMS != tc.ms || got.PingSource != tc.source || got.Signal != tc.signal {
+				t.Fatalf("ping %v source %q signal %d", got.PingMS, got.PingSource, got.Signal)
+			}
+			want := ServerInfo{Label: "미국 로스앤젤레스", IP: "1.2.3.4", Protocol: "vless"}
+			if got.Server == nil || *got.Server != want {
+				t.Fatalf("server %+v", got.Server)
+			}
+		})
+	}
+	var v View
+	v.Update(Snapshot{Status: StatusReady})
+	if s := v.State(); s.Server != nil || s.PingSource != "" || s.PingMS != nil {
+		t.Fatalf("off: %+v", s)
+	}
+}
+
+func TestPlaceLabel(t *testing.T) {
+	for _, tc := range [][3]string{{"US", "DFW", "미국 댈러스"}, {"US", "XYZ", "미국"}, {"CA", "YYZ", "CA"}} {
+		if got := placeLabel(tc[0], tc[1]); got != tc[2] {
+			t.Errorf("%s/%s: %q", tc[0], tc[1], got)
 		}
 	}
 }

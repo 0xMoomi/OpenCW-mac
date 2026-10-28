@@ -17,7 +17,10 @@ import (
 type Measurement struct {
 	At                         time.Time
 	ExitIP, UDPExitIP, Country string
-	UDPVerified                bool
+	// Colo is the IATA code of the Cloudflare data centre that answered the
+	// exit (e.g. "LAX"): the nearest large city to the exit, not a geolocation.
+	Colo        string
+	UDPVerified bool
 	// TCPMS and TCPSpreadMS time HTTPS responses after the TLS handshake;
 	// IdleMS and SpreadMS are the median and range of the UDP round trips.
 	TCPMS, TCPSpreadMS *float64

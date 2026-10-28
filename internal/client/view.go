@@ -25,17 +25,35 @@ type ViewState struct {
 	// Progress is the bar target while connecting; nil means no determinate
 	// fraction (an indeterminate bar while Busy, no bar otherwise).
 	Progress *float64 `json:"progress"`
-	// PingMS is the connected exit's latency, when measured.
-	PingMS *int `json:"ping_ms"`
+	// PingMS is the connected path's latency, when measured; PingSource says
+	// what it measures:
+	//   "game":  the live round trip Mac → relay → the game's data centre
+	//            (AWS us-west-2) → back, a median of recent probes;
+	//   "relay": Mac → relay exit only, from the connect-time check, shown
+	//            while the game-region probe fails;
+	//   "":      no ping.
+	PingMS     *int   `json:"ping_ms"`
+	PingSource string `json:"ping_source"`
 	// Signal is the Windows app's lit bar count out of 4: 0 (no reading) or
-	// 1 (bad), 2 (fair), 3–4 (good).
+	// 1 (bad), 2 (fair), 3–4 (good), for the same latency PingMS shows.
 	Signal int `json:"signal"`
+	// Server is the live exit while connected, nil otherwise.
+	Server *ServerInfo `json:"server"`
 	// CanToggle is false while the network is being restored, when the
 	// switch is disabled and toggle is ignored.
 	CanToggle bool   `json:"can_toggle"`
 	CanSwitch bool   `json:"can_switch"`
 	Busy      bool   `json:"busy"`
 	Error     string `json:"error"` // raw failure text, set only after a failure
+}
+
+// ServerInfo describes the live exit for people.
+type ServerInfo struct {
+	// Label is where the exit is, in Korean ("미국 로스앤젤레스"), or the
+	// country code when the place is unknown.
+	Label    string `json:"label"`
+	IP       string `json:"ip"`
+	Protocol string `json:"protocol"` // vless, hysteria2, shadowsocks, ...
 }
 
 type viewPhase int
@@ -126,12 +144,18 @@ func (v *View) State() ViewState {
 	case phaseConnected:
 		out.State = ViewConnected
 		out.CanSwitch = true
-		if m, ok := v.active(); ok {
-			if l := latencyOf(m); l != nil {
-				ms := int(math.Round(*l))
-				out.PingMS = &ms
-			}
+		m, _ := v.active()
+		if p := v.snap.Ping; p != nil && p.OK {
+			ms := int(math.Round(p.MS))
+			out.PingMS, out.PingSource = &ms, "game"
+			out.Signal = bars(&p.MS, p.SpreadMS, p.Failures)
+		} else if l := latencyOf(m); l != nil {
+			ms := int(math.Round(*l))
+			out.PingMS, out.PingSource = &ms, "relay"
 			out.Signal = signalBars(m)
+		}
+		if v.snap.Server != "" {
+			out.Server = &ServerInfo{Label: placeLabel(m.Country, m.Colo), IP: v.snap.Server, Protocol: v.snap.Protocol}
 		}
 	case phaseFailed:
 		out.Error = v.snap.Error
@@ -225,20 +249,26 @@ func latencyOf(m core.Measurement) *float64 {
 	return m.TCPMS
 }
 
-// signalBars is the Windows app's 0–4 bar verdict (0: no reading).
+// signalBars is the Windows app's 0–4 bar verdict for a measurement.
 func signalBars(m core.Measurement) int {
-	latency, spread := latencyOf(m), 0.0
+	spread := 0.0
 	if m.SpreadMS != nil {
 		spread = *m.SpreadMS
 	}
+	return bars(latencyOf(m), spread, m.Failures)
+}
+
+// bars is the Windows app's 0–4 bar verdict (0: no reading) with its
+// thresholds.
+func bars(latency *float64, spread float64, failures int) int {
 	switch {
 	case latency == nil:
 		return 0
-	case *latency <= 120 && spread <= 15 && m.Failures == 0:
+	case *latency <= 120 && spread <= 15 && failures == 0:
 		return 4
-	case *latency <= 180 && spread <= 15 && m.Failures == 0:
+	case *latency <= 180 && spread <= 15 && failures == 0:
 		return 3
-	case *latency <= 260 && spread <= 40 && m.Failures <= 1:
+	case *latency <= 260 && spread <= 40 && failures <= 1:
 		return 2
 	}
 	return 1

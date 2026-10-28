@@ -77,6 +77,15 @@ type Dependencies struct {
 	Start func(context.Context, core.Server, bool) (Connection, error)
 	// Verify measures a session's exit through the session itself.
 	Verify func(context.Context, Connection) (core.Measurement, error)
+	// Pinger, if set, probes the live connection's round trip to the game's
+	// region every pingInterval.
+	Pinger func(Connection) Pinger
+}
+
+// Pinger probes one connection; Ping returns the reading over recent probes.
+type Pinger interface {
+	Ping(context.Context) measure.Reading
+	Close()
 }
 
 // DefaultDependencies returns the production catalog, screen, tunnel and
@@ -106,13 +115,17 @@ type Snapshot struct {
 	// WantConnect is the end state the user asked for. Recovering marks an
 	// operation the Controller started itself to replace a failed connection.
 	Busy, Connecting, Connected, WantConnect, Recovering bool
-	// Status is a Status* key qualified by Detail. Server is the exit IP.
-	Status, Detail, Server, Error string
-	Err                           error        // classifiable form of Error
-	Rows                          []core.Probe // verified US exits, one per exit IP
-	Candidates                    int          // servers in the current selection
-	Compared, Passed              int          // hosts verified / passing in the last selection
-	Log                           []string     // recent logfmt lines, oldest first
+	// Status is a Status* key qualified by Detail. Server is the exit IP and
+	// Protocol the live relay's protocol.
+	Status, Detail, Server, Protocol, Error string
+	// Ping is the live connection's latest round-trip reading to the game's
+	// region; nil when there is none (no Pinger, or not connected).
+	Ping             *measure.Reading
+	Err              error        // classifiable form of Error
+	Rows             []core.Probe // verified US exits, one per exit IP
+	Candidates       int          // servers in the current selection
+	Compared, Passed int          // hosts verified / passing in the last selection
+	Log              []string     // recent logfmt lines, oldest first
 }
 
 // Controller runs one operation at a time (refresh, connect, switch,
@@ -139,6 +152,7 @@ type Controller struct {
 
 	healthInterval   time.Duration
 	healthRecheck    time.Duration
+	pingInterval     time.Duration
 	attemptBudget    time.Duration
 	comparisonWindow time.Duration
 	uncertainWindow  time.Duration
@@ -159,6 +173,7 @@ func New(deps Dependencies, changed func()) *Controller {
 		state:            Snapshot{Status: StatusStarting},
 		healthInterval:   defaultHealthInterval,
 		healthRecheck:    defaultHealthRecheck,
+		pingInterval:     measure.PingInterval,
 		attemptBudget:    defaultAttemptBudget,
 		comparisonWindow: defaultComparison,
 		uncertainWindow:  defaultUncertain,
@@ -395,6 +410,8 @@ func (c *Controller) disconnect() error {
 	old, oldStop := c.connection, c.connectionStop
 	c.connection, c.connectionStop = nil, nil
 	c.state.Connected = false
+	c.state.Protocol = ""
+	c.state.Ping = nil
 	c.mu.Unlock()
 	if oldStop != nil {
 		oldStop()
@@ -868,7 +885,17 @@ func (s *search) activate(r attemptResult) error {
 		return err
 	}
 	c.progress(StatusActivating, r.p.Measurement.ExitIP)
+	// The first probe runs before the switch turns on, so "connected" is
+	// never shown without a ping. A failed probe leaves the relay latency.
+	var pinger Pinger
+	var reading *measure.Reading
+	if c.deps.Pinger != nil {
+		pinger = c.deps.Pinger(r.connection)
+		first := pinger.Ping(r.lifetime)
+		reading = &first
+	}
 	if err := r.connection.EnableTun(); err != nil {
+		closePinger(pinger)
 		s.closeResult(r)
 		// This is a local interface/permission problem, not a failed relay.
 		return fmt.Errorf("%w: %w", ErrInterface, err)
@@ -877,6 +904,7 @@ func (s *search) activate(r attemptResult) error {
 	// Toggle or Close may have run while EnableTun was blocked.
 	if !c.state.WantConnect || c.closed || s.parent.Err() != nil {
 		c.mu.Unlock()
+		closePinger(pinger)
 		s.closeResult(r)
 		return context.Canceled
 	}
@@ -884,6 +912,8 @@ func (s *search) activate(r attemptResult) error {
 	c.connectionStop = r.stop
 	c.state.Connected = true
 	c.state.Server = r.p.Measurement.ExitIP
+	c.state.Protocol = r.p.Server.Protocol()
+	c.state.Ping = reading
 	c.state.Compared, c.state.Passed = len(s.checkedEndpoints), len(s.verifiedExits)
 	c.mu.Unlock()
 	c.progress(StatusConnected, r.p.Measurement.ExitIP)
@@ -892,9 +922,22 @@ func (s *search) activate(r attemptResult) error {
 	m := r.p.Measurement
 	c.log("INFO", "connect.ok", "exit", m.ExitIP, "relay", r.p.Server.IP, "protocol", r.p.Server.Protocol(),
 		"tcp_ms", m.TCPMS, "udp_ms", m.IdleMS, "loss", fmt.Sprintf("%d/%d", m.Failures, m.Attempts))
+	if reading != nil {
+		c.log("INFO", "ping", "ok", reading.OK, "ms", reading.MS)
+	}
 	c.wg.Add(1)
 	go c.monitor(r)
+	if pinger != nil {
+		c.wg.Add(1)
+		go c.pingLoop(r, pinger)
+	}
 	return nil
+}
+
+func closePinger(p Pinger) {
+	if p != nil {
+		p.Close()
+	}
 }
 
 func (s *search) closeResult(r attemptResult) {
@@ -1011,6 +1054,34 @@ func (c *Controller) monitor(live attemptResult) {
 		c.log("ERROR", "health.failed", "error", check.err)
 		c.switchExit(true)
 		return
+	}
+}
+
+// pingLoop probes the live connection every pingInterval and publishes each
+// changed reading. It exits when the connection's lifetime ends.
+func (c *Controller) pingLoop(live attemptResult, p Pinger) {
+	defer c.wg.Done()
+	defer p.Close()
+	tick := time.NewTicker(c.pingInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-live.lifetime.Done():
+			return
+		case <-tick.C:
+		}
+		r := p.Ping(live.lifetime)
+		c.mu.Lock()
+		if c.connection != live.connection || c.closed || live.lifetime.Err() != nil {
+			c.mu.Unlock()
+			return
+		}
+		changed := c.state.Ping == nil || *c.state.Ping != r
+		c.state.Ping = &r
+		c.mu.Unlock()
+		if changed {
+			c.emit()
+		}
 	}
 }
 

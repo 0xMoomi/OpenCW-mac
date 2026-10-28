@@ -1,6 +1,7 @@
 // Package measure checks relay candidates. Screen is a cheap TCP pre-check and
-// Verify confirms a relay's exit over HTTPS and STUN. Neither measures link
-// capacity, packet loss, or the path to a game server.
+// Verify confirms a relay's exit over HTTPS and STUN; neither measures link
+// capacity, packet loss, or the path beyond the exit. Pinger times the live
+// round trip through the relay to the data centre of the game's login servers.
 package measure
 
 import (

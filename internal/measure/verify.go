@@ -79,6 +79,7 @@ func Verify(parent context.Context, dial DialFunc) (core.Measurement, error) {
 	type response struct {
 		udp         bool
 		ip, country string
+		colo        string
 		ms          float64
 		err         error
 	}
@@ -90,8 +91,8 @@ func Verify(parent context.Context, dial DialFunc) (core.Measurement, error) {
 	}()
 	for range traceChecks {
 		workers.Go(func() {
-			ip, country, ms, err := trace(ctx, hc)
-			responses <- response{ip: ip, country: country, ms: ms, err: err}
+			t, err := trace(ctx, hc)
+			responses <- response{ip: t.ip, country: t.country, colo: t.colo, ms: t.ms, err: err}
 		})
 	}
 	for range stunChecks {
@@ -140,6 +141,9 @@ func Verify(parent context.Context, dial DialFunc) (core.Measurement, error) {
 			return m, fmt.Errorf("%w: TCP exit IP changed", ErrExitPolicy)
 		}
 		m.ExitIP, m.Country = r.ip, r.country
+		if m.Colo == "" {
+			m.Colo = r.colo
+		}
 		if m.Country != "US" {
 			return m, fmt.Errorf("%w: exit country %s", ErrExitPolicy, m.Country)
 		}
@@ -193,9 +197,16 @@ func ipv4Only(dial DialFunc) DialFunc {
 	}
 }
 
+// traceResult is one Cloudflare trace: the exit IP, its country, the data
+// centre that answered and the response time after the TLS handshake.
+type traceResult struct {
+	ip, country, colo string
+	ms                float64
+}
+
 // trace fetches the exit IP and country and times the response after the
 // connection and TLS handshake are up.
-func trace(ctx context.Context, hc *http.Client) (string, string, float64, error) {
+func trace(ctx context.Context, hc *http.Client) (traceResult, error) {
 	// HTTP trace hooks may run concurrently, so retain monotonic times under
 	// one mutex.
 	var mu sync.Mutex
@@ -215,22 +226,22 @@ func trace(ctx context.Context, hc *http.Client) (string, string, float64, error
 	ctx = httptrace.WithClientTrace(ctx, hooks)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, traceURL, nil)
 	if err != nil {
-		return "", "", 0, err
+		return traceResult{}, err
 	}
 	req.Header.Set("Cache-Control", "no-cache, no-store")
 	res, err := hc.Do(req)
 	if err != nil {
-		return "", "", 0, err
+		return traceResult{}, err
 	}
 	defer res.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(res.Body, maxSmallResponse+1))
 	if err != nil {
-		return "", "", 0, err
+		return traceResult{}, err
 	}
 	if res.StatusCode != http.StatusOK || len(b) > maxSmallResponse {
-		return "", "", 0, errors.New("invalid exit response")
+		return traceResult{}, errors.New("invalid exit response")
 	}
-	var ip, country string
+	var t traceResult
 	for line := range strings.SplitSeq(string(b), "\n") {
 		k, v, ok := strings.Cut(line, "=")
 		if !ok {
@@ -238,18 +249,19 @@ func trace(ctx context.Context, hc *http.Client) (string, string, float64, error
 		}
 		switch k {
 		case "ip":
-			ip = strings.TrimSpace(v)
+			t.ip = strings.TrimSpace(v)
 		case "loc":
-			country = strings.TrimSpace(v)
+			t.country = strings.TrimSpace(v)
+		case "colo":
+			t.colo = strings.TrimSpace(v)
 		}
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	ms := 0.0
 	if !connected.IsZero() && firstByte.After(connected) {
-		ms = millis(firstByte.Sub(connected))
+		t.ms = millis(firstByte.Sub(connected))
 	}
-	return ip, country, ms, nil
+	return t, nil
 }
 
 // exitCountry geolocates the UDP exit when it differs from the HTTPS exit.

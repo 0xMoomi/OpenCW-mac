@@ -15,6 +15,7 @@ import (
 
 	"opencw/internal/client"
 	"opencw/internal/ipc"
+	"opencw/internal/measure"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -84,7 +85,10 @@ func run() error {
 	srv := &ipc.Server{
 		Allow: ipc.AllowPath(appPath),
 		NewController: func(changed func()) ipc.Controller {
-			return client.New(client.DefaultDependencies(), changed)
+			deps := client.DefaultDependencies()
+			// The app shows a live ping; the Windows window does not.
+			deps.Pinger = func(c client.Connection) client.Pinger { return measure.NewPinger(c.DialContext) }
+			return client.New(deps, changed)
 		},
 		Closed: func(err error) {
 			if err != nil {
