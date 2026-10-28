@@ -7,11 +7,21 @@ struct Snapshot: Decodable, Equatable, Sendable {
         case off, connecting, connected
     }
 
+    /// The live exit: where it is, its address and relay protocol.
+    struct Server: Decodable, Equatable, Sendable {
+        var label: String
+        var ip: String
+        var `protocol`: String
+    }
+
     var state: State
     var title: String
     var subtitle: String
     var progress: Double?
     var pingMS: Int?
+    /// "game": round trip through the relay to the game servers' region;
+    /// "relay": to the relay only, while that region does not answer.
+    var pingSource: String
     /// Lit bars out of 4, as upstream draws them: 0 none, 1 bad, 2 fair, 3–4 good.
     var signal: Int
     /// False while the daemon restores the network and ignores toggle.
@@ -19,27 +29,32 @@ struct Snapshot: Decodable, Equatable, Sendable {
     var canSwitch: Bool
     var busy: Bool
     var error: String
+    /// Set while connected.
+    var server: Server?
 
     enum CodingKeys: String, CodingKey {
-        case state, title, subtitle, progress, signal, busy, error
+        case state, title, subtitle, progress, signal, busy, error, server
         case pingMS = "ping_ms"
+        case pingSource = "ping_source"
         case canToggle = "can_toggle"
         case canSwitch = "can_switch"
     }
 
     init(state: State, title: String, subtitle: String, progress: Double? = nil, pingMS: Int? = nil,
-         signal: Int = 0, canToggle: Bool = false, canSwitch: Bool = false, busy: Bool = false,
-         error: String = "") {
+         pingSource: String = "", signal: Int = 0, canToggle: Bool = false, canSwitch: Bool = false,
+         busy: Bool = false, error: String = "", server: Server? = nil) {
         self.state = state
         self.title = title
         self.subtitle = subtitle
         self.progress = progress
         self.pingMS = pingMS
+        self.pingSource = pingSource
         self.signal = signal
         self.canToggle = canToggle
         self.canSwitch = canSwitch
         self.busy = busy
         self.error = error
+        self.server = server
     }
 
     init(from decoder: Decoder) throws {
@@ -49,11 +64,13 @@ struct Snapshot: Decodable, Equatable, Sendable {
         subtitle = try c.decodeIfPresent(String.self, forKey: .subtitle) ?? ""
         progress = try c.decodeIfPresent(Double.self, forKey: .progress)
         pingMS = try c.decodeIfPresent(Int.self, forKey: .pingMS)
+        pingSource = try c.decodeIfPresent(String.self, forKey: .pingSource) ?? ""
         signal = try c.decodeIfPresent(Int.self, forKey: .signal) ?? 0
         canToggle = try c.decodeIfPresent(Bool.self, forKey: .canToggle) ?? false
         canSwitch = try c.decodeIfPresent(Bool.self, forKey: .canSwitch) ?? false
         busy = try c.decodeIfPresent(Bool.self, forKey: .busy) ?? false
         error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
+        server = try? c.decodeIfPresent(Server.self, forKey: .server)
     }
 
     /// Shown, muted and inert, until the first connect attempt settles.

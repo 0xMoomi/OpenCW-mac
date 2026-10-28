@@ -31,6 +31,7 @@ enum Fonts {
     static let headline = Font.system(size: 28, weight: .bold)
     static let body = Font.system(size: 15)
     static let small = Font.system(size: 13)
+    static let caption = Font.system(size: 12)
     static let ping = Font.system(size: 30, weight: .bold)
     static let button = Font.system(size: 15, weight: .bold)
     static let rowKey = Font.system(size: 14)

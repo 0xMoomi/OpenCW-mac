@@ -1,8 +1,11 @@
 import AppKit
+import Combine
 import SwiftUI
 
-// The app is one fixed-size window. Closing it quits the app; the daemon
-// tears the tunnel down when the app's socket closes, so quitting is enough.
+// The app is one fixed-size window plus a menu-bar item. Closing the window
+// only hides it (and the Dock icon); the connection stays up and the
+// menu-bar item remains. Quitting closes the socket, and the daemon tears the
+// tunnel down when it does.
 @main
 @MainActor
 enum OpenCWApp {
@@ -16,8 +19,9 @@ enum OpenCWApp {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var window: NSWindow?
+    private var statusMenu: StatusMenu?
     private let model = Model()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -39,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.appearance = NSAppearance(named: .aqua)
         window.backgroundColor = NSColor(Palette.canvasBg)
         window.isReleasedWhenClosed = false
+        window.delegate = self
         // The title bar height differs between macOS releases; the content
         // runs under it, so the window grows by exactly that much.
         let titleBar = window.frame.height - window.contentLayoutRect.height
@@ -47,15 +52,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = host
         window.setContentSize(NSSize(width: Metrics.width, height: Metrics.height + titleBar))
         window.center()
-        window.makeKeyAndOrderFront(nil)
         self.window = window
 
-        NSApp.activate(ignoringOtherApps: true)
+        statusMenu = StatusMenu(model: model, open: { [weak self] in self?.showWindow() })
+        showWindow()
         model.start()
     }
 
+    /// Brings the window back, with the Dock icon.
+    func showWindow() {
+        NSApp.setActivationPolicy(.regular)
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // Closing hides the window and the Dock icon; the menu-bar item stays.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
+        return false
+    }
+
+    // Clicking the Dock icon or opening the app again shows the window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWindow()
+        return false
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
     }
 
     private func mainMenu() -> NSMenu {
@@ -78,14 +103,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// Model holds the latest daemon snapshot for the view.
+/// A finished server change: where from and to, and the ping before and after.
+struct ServerChange: Equatable {
+    var from: Snapshot.Server
+    var to: Snapshot.Server
+    var fromPing: Int?
+    var toPing: Int?
+
+    /// "미국 로스앤젤레스 → 미국 댈러스"; the same place reads as another server there.
+    var places: String {
+        from.label == to.label ? "\(to.label)의 다른 서버" : "\(from.label) → \(to.label)"
+    }
+
+    /// "152 → 128 ms", when both pings are known.
+    var pings: String? {
+        guard let a = fromPing, let b = toPing else { return nil }
+        return "\(a) → \(b) ms"
+    }
+
+    var summary: String {
+        [places, pings].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+// Model holds the latest daemon snapshot for the views.
 @MainActor
 final class Model: ObservableObject {
     enum Link { case starting, reachable, unreachable }
 
     @Published private(set) var snap = Snapshot.initial
     @Published private(set) var link = Link.starting
+    /// The most recent server change, kept for the menu-bar menu.
+    @Published private(set) var lastChange: ServerChange?
+    /// The change the window announces, for a few seconds.
+    @Published private(set) var notice: ServerChange?
     private var client: DaemonClient?
+    // The exit and ping of the current connection, to compare after a change.
+    private var server: Snapshot.Server?
+    private var ping: Int?
+    private var noticeTimer: Timer?
 
     func start() {
         let path = ProcessInfo.processInfo.environment["OPENCW_SOCKET"] ?? "/var/run/opencw.sock"
@@ -103,16 +159,51 @@ final class Model: ObservableObject {
         switch event {
         case .snapshot(let s):
             link = .reachable
+            track(s)
             snap = s
         case .unreachable:
             link = .unreachable
             snap = .unreachable
+            server = nil
+            ping = nil
+        }
+    }
+
+    /// Notices a new exit after a reconnect. Switching passes through
+    /// "connecting", never "off", so turning OpenCW off forgets the exit and
+    /// a later connect is not reported as a change.
+    private func track(_ s: Snapshot) {
+        switch s.state {
+        case .connected:
+            guard let now = s.server else { return }
+            if let before = server, before.ip != now.ip {
+                let change = ServerChange(from: before, to: now, fromPing: ping, toPing: s.pingMS)
+                lastChange = change
+                announce(change)
+            }
+            server = now
+            ping = s.pingMS ?? ping
+        case .connecting:
+            break
+        case .off:
+            server = nil
+            ping = nil
+        }
+    }
+
+    private func announce(_ change: ServerChange) {
+        notice = change
+        noticeTimer?.invalidate()
+        noticeTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.notice = nil }
         }
     }
 
     /// The switch is inert until the helper answers and while the helper
     /// restores the network, exactly when it would ignore a toggle.
     var toggleEnabled: Bool { link == .reachable && snap.canToggle }
+
+    var switchEnabled: Bool { link == .reachable && snap.canSwitch }
 
     /// Upstream paints the subtitle red only for a failed verdict; here also
     /// when the helper cannot be reached.
@@ -124,7 +215,7 @@ final class Model: ObservableObject {
     }
 
     func switchServer() {
-        guard link == .reachable, snap.canSwitch else { return }
+        guard switchEnabled else { return }
         client?.send(cmd: "switch")
     }
 }

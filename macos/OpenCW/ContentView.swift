@@ -16,6 +16,12 @@ struct ContentView: View {
                 } else {
                     HomeView(model: model)
                 }
+                if let change = model.notice {
+                    ChangeNotice(change: change)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 14)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 IconButton(glyph: showInfo ? .close : .info, label: showInfo ? "닫기" : "정보") {
                     showInfo.toggle()
                 }
@@ -24,6 +30,7 @@ struct ContentView: View {
                 .padding(.trailing, 34 - 18)
             }
             .frame(width: Metrics.width, height: Metrics.height)
+            .animation(.easeOut(duration: 0.25), value: model.notice)
         }
         .frame(width: Metrics.width, height: Metrics.height + titleBar)
         .background(Palette.canvasBg)
@@ -104,15 +111,53 @@ struct HomeView: View {
             if s.state == .connected {
                 PingRow(ms: s.pingMS, signal: s.signal)
                     .padding(.top, 26)
+                Text(pingCaption(s))
+                    .font(Fonts.caption)
+                    .foregroundColor(Palette.muted)
+                    .lineLimit(1)
+                    .padding(.top, 2)
                 Button("서버 변경") { model.switchServer() }
                     .buttonStyle(QuietButtonStyle(width: 120, height: 40))
                     .disabled(!s.canSwitch)
-                    .padding(.top, 22)
+                    .padding(.top, 18)
             }
         }
         .padding(.horizontal, 20)
         .frame(width: Metrics.width, height: Metrics.height)
         .animation(.easeOut(duration: 0.3), value: s)
+    }
+
+    /// Where the ping goes: the exit, and the relay alone when the game
+    /// servers' region does not answer.
+    private func pingCaption(_ s: Snapshot) -> String {
+        let place = s.server.map { "\($0.label) 서버 경유" } ?? "서버 경유"
+        return s.pingSource == "relay" ? "\(place) · 중계 서버까지의 핑" : place
+    }
+}
+
+/// A small card announcing a finished server change.
+private struct ChangeNotice: View {
+    var change: ServerChange
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("서버 변경됨")
+                .font(Fonts.small.weight(.bold))
+                .foregroundColor(Palette.ink)
+            Text(change.summary)
+                .font(Fonts.small)
+                .foregroundColor(Palette.muted)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Palette.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.border, lineWidth: 1))
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        .padding(.horizontal, 56)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -131,6 +176,8 @@ private struct PingRow: View {
                 .font(Fonts.ping)
                 .foregroundColor(Palette.ink)
                 .monospacedDigit()
+                // Live readings roll to the new number instead of jumping.
+                .contentTransition(.numericText())
             Text("ms")
                 .font(Fonts.body)
                 .foregroundColor(Palette.muted)

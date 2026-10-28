@@ -46,10 +46,15 @@
 2. 창 가운데의 **스위치**를 누릅니다. 스위치가 주황색으로 바뀌고 `연결 중`이 표시됩니다.
 3. `연결됨`이 나올 때까지 기다립니다. 보통 몇 초 걸립니다.
 4. 그다음 **MapleStory Launcher**를 실행해 평소처럼 게임을 시작합니다.
-5. 게임하는 동안 OpenCW는 **끄지 말고** 그대로 둡니다. 창은 최소화해도 됩니다.
-6. 끝낼 때는 스위치를 다시 누르거나 OpenCW를 종료합니다(Cmd+Q). **OpenCW를 종료하면 연결도 해제**되고, 네트워크 설정은 자동으로 원래대로 돌아옵니다.
+5. 게임하는 동안 OpenCW는 **종료하지 말고** 그대로 둡니다. 창은 닫아도 됩니다. 창을 닫으면 OpenCW는 화면 맨 위 메뉴 막대의 **단풍잎 아이콘**으로 들어가고(Dock 아이콘도 사라집니다) **연결은 그대로 유지**됩니다. 연결된 동안 아이콘 옆에 현재 핑(예: `145ms`)이 표시됩니다.
+6. 창을 다시 보려면 메뉴 막대의 단풍잎 아이콘을 눌러 **OpenCW 열기**를 고르거나, 응용 프로그램 폴더에서 OpenCW를 다시 엽니다. 아이콘 메뉴에서 바로 **연결 / 연결 해제**, **서버 변경**도 할 수 있습니다.
+7. 끝낼 때는 스위치를 다시 누르거나, 단풍잎 아이콘 메뉴의 **OpenCW 종료**(창이 앞에 있을 때는 Cmd+Q)로 OpenCW를 종료합니다. **OpenCW를 종료하면 연결도 해제**되고, 네트워크 설정은 자동으로 원래대로 돌아옵니다.
 
-핑이 마음에 들지 않으면 연결된 상태에서 **서버 변경**을 눌러 다른 서버로 옮길 수 있습니다.
+> 메뉴 막대가 꽉 차면 macOS가 일부 아이콘을 숨길 수 있습니다. 단풍잎 아이콘이 보이지 않으면 응용 프로그램 폴더에서 OpenCW를 다시 열어 창을 띄우세요.
+
+화면의 **핑(ms)** 은 연결된 동안 몇 초마다 새로 잰 값입니다. 중계 서버를 거쳐 메이플스토리 로그인 서버가 있는 미국 서부(오리건) 데이터센터까지 다녀오는 시간이라, 게임 안의 핑과 조금 다를 수 있습니다. 이 측정이 잠시 안 되면 중계 서버까지의 핑을 대신 보여주고 `중계 서버까지의 핑`이라고 표시합니다.
+
+핑이 마음에 들지 않으면 연결된 상태에서 **서버 변경**을 눌러 다른 서버로 옮길 수 있습니다. 바뀐 뒤에는 `서버 변경됨 · 미국 로스앤젤레스 → 미국 댈러스 · 152 → 128 ms`처럼 어디에서 어디로 바뀌었고 핑이 어떻게 달라졌는지 창에 잠깐 보여주며, 단풍잎 아이콘 메뉴에도 마지막 변경이 남습니다. (지역 이름은 중계 서버 출구에서 가장 가까운 큰 도시입니다.)
 
 ## 문제가 생기면
 
@@ -74,13 +79,13 @@ sudo /Applications/OpenCW.app/Contents/Resources/uninstall.sh
 배포 파일은 태그된 소스 코드로 GitHub Actions에서 직접 만들어지며, 빌드 출처 증명(attestation)이 함께 제공됩니다. [GitHub CLI](https://cli.github.com/)가 있다면:
 
 ~~~sh
-gh attestation verify OpenCW-1.0.0-macos.pkg --repo 0xMoomi/OpenCW-mac
+gh attestation verify OpenCW-1.1.0-macos.pkg --repo 0xMoomi/OpenCW-mac
 ~~~
 
 Releases의 `SHA256SUMS.txt`와 해시를 비교할 수도 있습니다.
 
 ~~~sh
-shasum -a 256 OpenCW-1.0.0-macos.pkg
+shasum -a 256 OpenCW-1.1.0-macos.pkg
 ~~~
 
 ## 직접 빌드하기
@@ -88,16 +93,17 @@ shasum -a 256 OpenCW-1.0.0-macos.pkg
 [Go](https://go.dev/dl/)(`brew install go`)와 Xcode 또는 Command Line Tools(`xcode-select --install`, Swift 컴파일러)가 필요합니다. Go 컴파일러 버전은 `go.mod`에 적혀 있으며 빌드할 때 자동으로 맞춰집니다.
 
 ~~~sh
-./package.sh 1.0.0
+./package.sh 1.1.0
 ~~~
 
-`dist/OpenCW-1.0.0-macos.pkg`와 `dist/SHA256SUMS.txt`가 만들어집니다.
+`dist/OpenCW-1.1.0-macos.pkg`와 `dist/SHA256SUMS.txt`가 만들어집니다.
 
 ### 동작 방식 (참고)
 
 - Mac용 메이플스토리는 CrossOver(Wine) 위에서 돌아가서 게임과 Nexon 런처를 서로 구별할 수 없습니다. 그래서 `/Applications/MapleStory Launcher.app` 안의 프로그램이 쓰는 통신은 모두 중계하되, 80번(HTTP 다운로드)과 853번 포트만 직접 연결합니다(로그인 서버는 80번이어도 중계).
 - OpenCW는 두 부분으로 되어 있습니다. 화면을 보여주는 앱(`/Applications/OpenCW.app`, SwiftUI)과, 네트워크 경로를 바꾸는 관리자(root) 권한 도우미(`OpenCW.app/Contents/Resources/opencw-mac`)입니다. 도우미는 `/Library/LaunchDaemons/io.github.0xmoomi.opencw.plist`로 등록되어 Mac이 켜질 때 시작되고, 앱이 연결될 때까지 아무 일도 하지 않습니다.
-- 앱과 도우미는 `/var/run/opencw.sock`으로 통신합니다. 도우미는 연결한 프로그램이 `/Applications/OpenCW.app/Contents/MacOS/OpenCW`일 때만 받아들이고, 앱이 종료되면(비정상 종료 포함) 연결을 해제합니다.
+- 앱과 도우미는 `/var/run/opencw.sock`으로 통신합니다. 도우미는 연결한 프로그램이 `/Applications/OpenCW.app/Contents/MacOS/OpenCW`일 때만 받아들이고, 앱이 종료되면(비정상 종료 포함) 연결을 해제합니다. 창을 닫는 것은 종료가 아니므로 연결이 유지됩니다.
+- 핑 측정: 연결된 동안 4초마다 중계 서버를 거쳐 AWS us-west-2(오리건)의 공개 상태 확인 주소 `dynamodb.us-west-2.amazonaws.com`에 작은 HTTPS 요청을 하나 보내고, 한 번 맺은 연결을 계속 재사용하여 요청을 보낸 뒤 첫 응답이 올 때까지의 시간만 잽니다(최근 5번의 중앙값). 메이플스토리 로그인 서버(`login.maplestory.nexon.net`)가 이 지역에 있지만 게임 전용 통신만 받기 때문에, 게임·로그인 서버에는 측정용 접속을 하지 않습니다.
 - 앱, 도우미, 등록 파일은 모두 관리자(root) 소유로 설치되어 일반 사용자 계정으로는 수정할 수 없습니다.
 
 ## 라이선스
